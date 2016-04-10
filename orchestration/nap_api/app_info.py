@@ -1,12 +1,13 @@
 # coding=utf-8
 import commands
-import MySQLdb
 
+import MySQLdb
 from docker import Client
+
 from orchestration import config
-from orchestration.database import database_update
-from orchestration.container_api.container import Container
-from orchestration.container_api.client import Client
+from orchestration.container.client import Client
+from orchestration.container.container import Container
+from orchestration.db import db_model
 from orchestration.project import Project
 
 
@@ -29,12 +30,12 @@ def create_user(username, email):
     commands.getstatusoutput("ssh %s@%s 'cd %s && mkdir %s'" % (
         config.hostname, config.client_list[0].split(":")[0], config.project_path, username))
 
-    return database_update.create_user(username, email)
+    return db_model.create_user(username, email)
 
 
 def delete_user(username):
     try:
-        database_update.delete_user(username)
+        db_model.delete_user(username)
     except MySQLdb.OperationalError as e:
         return False, e.message
 
@@ -52,13 +53,13 @@ def delete_user(username):
 
 
 def service_name_list(username, project_name):
-    data = database_update.service_list(username, project_name)
+    data = db_model.service_list(username, project_name)
 
     return data
 
 
 def get_service(username, project_name, service_name):
-    url = database_update.service_ip(username, project_name, service_name)
+    url = db_model.service_ip(username, project_name, service_name)
     full_name = service_name + config.split_mark + project_name + config.split_mark + username
 
     cli = Client(url, config.c_version)
@@ -92,13 +93,13 @@ def get_service(username, project_name, service_name):
 
 
 def service_list(username, project_name):
-    name_list = database_update.service_list(username, project_name)
+    name_list = db_model.service_list(username, project_name)
     if name_list is None:
         return '-'
 
     srv_list = []
     for service_name in name_list:
-        url = database_update.service_ip(username, project_name, service_name[0])
+        url = db_model.service_ip(username, project_name, service_name[0])
         full_name = service_name[0] + config.split_mark + project_name + config.split_mark + username
 
         cli = Client(url, config.c_version)
@@ -157,12 +158,12 @@ def service_list(username, project_name):
 
 
 def project_list(username, begin, length):
-    data = database_update.project_list(username, begin, length)
+    data = db_model.project_list(username, begin, length)
     return data
 
 
 def get_project(username, project_name):
-    data = database_update.get_project(username, project_name)
+    data = db_model.get_project(username, project_name)
     return data
 
 
@@ -187,7 +188,7 @@ def get_project_service(username, project_name):
 
     for service in service_name:
         print ("service: %s" % service[0])
-        ip = database_update.service_ip(username, project_name, service[0])
+        ip = db_model.service_ip(username, project_name, service[0])
         item = {"name": service[0] + config.split_mark + project_name + config.split_mark + username, "ip": ip}
         print (item)
         services.append(item)
@@ -222,15 +223,15 @@ def destroy_project(username, project_name):
     #             cli.stop(container=full_name)
     #             cli.remove_container(container=full_name)
 
-    database_update.delete_service(username, project_name)
-    database_update.delete_project(username, project_name)
+    db_model.delete_service(username, project_name)
+    db_model.delete_project(username, project_name)
 
     return True, 'Destroy project: %s success' % project_name
 
 
 # not use again
 def get_status(username, password, project_name, service_name):
-    cip = database_update.service_ip(username, project_name, service_name)
+    cip = db_model.service_ip(username, project_name, service_name)
     if cip == '-':
         return 'no such project or service'
 
@@ -247,7 +248,7 @@ def get_status(username, password, project_name, service_name):
 
 # not use again
 def get_port(username, project_name, service_name):
-    cip = database_update.service_ip(username, project_name, service_name)
+    cip = db_model.service_ip(username, project_name, service_name)
     if cip == '-':
         return 'no such project or service'
 
@@ -270,7 +271,7 @@ def container_exists(cli, container_name):
 
 
 def get_logs(username, project_name, service_name):
-    cip = database_update.service_ip(username, project_name, service_name)
+    cip = db_model.service_ip(username, project_name, service_name)
 
     if cip == '-':
         return 'no such project or service'

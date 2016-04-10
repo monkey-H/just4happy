@@ -1,12 +1,15 @@
-from orchestration.database import database_update
-from orchestration import config
-from orchestration.nap_api.project_create import create_project_from_filebrowser
 import os
 import shutil
+
 from git import Repo
 
+from orchestration import config
+from orchestration.db import db_model
+from orchestration.nap_api.project_create import create_project_from_filebrowser
+
+
 def create_project_from_table(username, password, project_name, table):
-    if database_update.project_exists(username, password, project_name):
+    if db_model.project_exists(username, password, project_name):
         return False, "Project: %s already exists! try another name and try again" % project_name
 
     if os.path.exists('%s/%s/%s' % (config.base_path, username, project_name)):

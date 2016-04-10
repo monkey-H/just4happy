@@ -1,16 +1,16 @@
 # coding=utf-8
-from orchestration.database import database_update
-import re
-import os
 import logging
+import os
+import re
 import shutil
-
-from orchestration import config
-from orchestration.project import Project
 
 from git import Repo #pip pygit
 from git.exc import GitCommandError
-from orchestration.database.database_update import roll_back
+
+from orchestration import config
+from orchestration.db import db_model
+from orchestration.db.db_model import roll_back
+from orchestration.project import Project
 
 # from orchestration.config.errors import ComposeFileNotFound
 # from orchestration.cli.docopt_command import NoSuchCommand
@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 
 # git clone from url into file
 def create_project_from_url(username, project_name, url):
-    if database_update.project_exists(username, project_name):
+    if db_model.project_exists(username, project_name):
         return False, "Project: %s already exists! try another name and try again" % project_name
 
     if os.path.exists('%s/%s/%s' % (config.base_path, username, project_name)):
@@ -49,17 +49,17 @@ def create_project_from_url(username, project_name, url):
     # except:
     #     return False, "git clone error, please connect administrator for information"
 
-    database_update.create_project(username, project_name, url)
+    db_model.create_project(username, project_name, url)
 
     return create_project_from_file(username, project_name)
 
 
 def create_project_from_file_browser(username, project_name):
-    if database_update.project_exists(username, project_name):
+    if db_model.project_exists(username, project_name):
         return False, "Project: %s already exists! try another name and try again" % project_name
 
     url = "create from file browser"
-    database_update.create_project(username, project_name, url)
+    db_model.create_project(username, project_name, url)
 
     return create_project_from_file(username, project_name)
 

@@ -1,4 +1,4 @@
-from orchestration.container_api.container import Container
+from orchestration.container.container import Container
 
 
 class Service(object):

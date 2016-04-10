@@ -39,26 +39,23 @@ install_requires = [
     'jsonschema >= 2.5.1, < 3',
 ]
 
-
 tests_require = [
     'pytest',
 ]
-
 
 if sys.version_info[:2] < (3, 4):
     tests_require.append('mock >= 1.0.1')
     install_requires.append('enum34 >= 1.0.4, < 2')
 
-
 setup(
     name='just4happy',
     version=find_version("orchestration", "__init__.py"),
-    description='nap orchestration for Docker',
+    description='nap containers orchestration tool',
     url='https://nap.artemisprojects.org/',
-    author='nap-Ying& nap-Yuan',
+    author='nap: YUAN Zhongliang , ZHANG Ying',
     license='Apache License 2.0',
     packages=find_packages(exclude=['tests.*', 'tests']),
-    include_package_data = True,
+    include_package_data=True,
     test_suite='nose.collector',
     install_requires=install_requires,
     tests_require=tests_require,

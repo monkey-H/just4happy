@@ -1,14 +1,12 @@
-from orchestration.service import Service
-from orchestration.config import config as file_treat
-from orchestration import config
-from orchestration.exception import ConfigError
-
-from orchestration.exception import DependencyError
-from orchestration.database import database_update
-
 import logging
-import random
-from container_api.client import Client
+
+from container.client import Client
+from orchestration import config
+from orchestration.config import parse_yml as file_treat
+from orchestration.db import db_model
+from orchestration.exception import ConfigError
+from orchestration.exception import DependencyError
+from orchestration.service import Service
 
 log = logging.getLogger(__name__)
 
@@ -140,7 +138,7 @@ class Project(object):
 
             print service_dict
 
-            client_list = database_update.get_machines()
+            client_list = db_model.get_machines()
 
             if 'host' in service_dict:
                 if service_dict['host'] == 'all':
@@ -157,7 +155,7 @@ class Project(object):
                                 options=service_dict
                             )
                         )
-                        database_update.create_service(username, container_name+no, client, name)
+                        db_model.create_service(username, container_name + no, client, name)
                         no += 1
                     return project
                 else:
@@ -178,7 +176,7 @@ class Project(object):
                     volume=None,
                     options=service_dict))
 
-            database_update.create_service(username, container_name, ip, name)
+            db_model.create_service(username, container_name, ip, name)
         return project
 
     @classmethod

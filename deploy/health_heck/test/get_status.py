@@ -1,12 +1,12 @@
 #!/usr/bin/python
 
 import time
+
 import consul
-import health_heck.config
 
 
 def get_status(user_name, project_name, service_name):
-    c = consul.Consul(health_heck.config.consul_url)
+    c = consul.Consul(deploy.health_heck.config.consul_url)
 
     v = c.kv.get('nap_services/%s/%s/%s' % (user_name, project_name, service_name))
     print(v)

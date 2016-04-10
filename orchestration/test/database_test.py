@@ -1,4 +1,4 @@
-from orchestration.database import database_update
+from orchestration.db import db_model
 
 if __name__ == '__main__':
     ip_list = ['114.212.189.147:2376', '114.212.189.140:2376']
@@ -17,4 +17,4 @@ if __name__ == '__main__':
     # print database_update.project_list('test', 0, 2)
     # database_update.delete_project('test', 'project')
     # print database_update.project_list('test', 0, 2)
-    print database_update.service_ip('test', 'project', 'service')
+    print db_model.service_ip('test', 'project', 'service')

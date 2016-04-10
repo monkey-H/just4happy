@@ -1,6 +1,6 @@
 import os
 
-import yaml #pip install pyyaml
+import yaml  # pip install pyyaml
 
 from orchestration import schedule
 from orchestration.exception import ConfigurationError

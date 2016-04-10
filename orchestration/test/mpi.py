@@ -1,6 +1,6 @@
-from orchestration import config
-from orchestration.nap_api import create_from_table
 from orchestration.nap_api import app_info
+from orchestration.nap_api import create_from_table
+
 
 def create_mpi(username, password, mpi_name, slaves):
     table = []

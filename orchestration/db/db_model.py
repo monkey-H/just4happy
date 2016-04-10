@@ -1,93 +1,42 @@
-from docker import Client
-import MySQLdb
-from orchestration import config
+import db_helper as db
 
 
-# database_url = '114.212.189.147'
-# c_version = '1.21'
-# split_mark = '-'
-# client_list = ['114.212.189.147:2376', '114.212.189.140:2376']
+################################################################################
+# 由于添加用户时会创建默认的overlay网络，所有该用户的容器都接入该默认网络
+# 暂不支持更多的overlay网络
 
-def tuple_in_tuple(db_tuple):
-    ret_data = []
-    for item in db_tuple:
-        ret_data.append(item[0])
-    return ret_data
-
+# todo: sql string need quot '' ?
 
 # not use temporarily
-def get_net(username, password):
-    db = MySQLdb.connect(config.database_url, username, password, username)
-    cursor = db.cursor()
-    cursor.execute("select net from info where name='%s'" % username)
-    data = cursor.fetchone()
-    db.close()
+def get_net(user_id):
+    data = db.exec_cmd("select net from info where name='%s'", user_id)  # todo: verify this
     return data[0]
 
 
 # not use temporarily
-def set_net(username, password):
-    db = MySQLdb.connect(config.database_url, username, password, username)
-    cursor = db.cursor()
-    cursor.execute("insert into info(net) values('%s') where name='%s'" % (username, username))
-    db.commit()
-    db.close()
+def set_net(user_id, net_id):
+    db.exec_cmd("insert into info(net) values('%s') where name='%s'", (net_id, user_id))  # todo: verify this
 
 
 # not use temporarily
-def get_volume(username, password):
-    db = MySQLdb.connect(config.database_url, username, password, username)
-    cursor = db.cursor()
-    cursor.execute("select volume from info where name='%s'" % username)
-    data = cursor.fetchone()
-    db.close()
-    return data
+def get_volume(user_id):
+    return db.exec_list("select volume from info where name='%s'", user_id)
 
 
 # not use temporarily
-def set_volume(username, password):
-    db = MySQLdb.connect(config.database_url, username, password, username)
-    cursor = db.cursor()
-    cursor.execute("insert into info(volume) values('%s') where name='%s'" % (username, username))
-    db.commit()
-    db.close()
+def set_volume(user_id, volume_path):
+    db.exec_cmd("insert into info(volume) values('%s') where name='%s'", (user_id, volume_path))
 
 
-def database_get(clause):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute(clause)
-    data = cursor.fetchall()
-    db.close()
-
-    return data
-
-
-def database_set(clause):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute(clause)
-    db.commit()
-    db.close()
-
-
-def get_service(username, project_name, service_name):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select id from projects where name = '%s' and userID=(select id from user where name='%s')"
-                   % (project_name, username))
-    data = cursor.fetchall()
-
-    if len(data) == 0:
-        return None
-
-    cursor.execute("select name from services where projectID='%d' and name = " % data[0])
-    data = cursor.fetchall()
-
-    if data is None:
-        return None
-
-
+def get_service(user_id, project_id, service_name):
+    # db.exec_list("select id from projects where name = '%s' and userID='%s'"
+    #                % (project_name, username))
+    #
+    # cursor.execute("select name from services where projectID='%d' and name = " % data[0])
+    # data = cursor.fetchall()
+    #
+    # if data is None:
+    #     return None
 
 
 def service_list(username, project_name):
@@ -170,14 +119,6 @@ def roll_back(username, password, project_name):
     return logs
 
 
-def container_exists(cli, container_name):
-    containers = cli.containers(all=True)
-    for k in containers:
-        if '/' + container_name in k['Names']:
-            return True
-    return False
-
-
 def service_ip(username, project_name, service_name):
     db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
     cursor = db.cursor()
@@ -229,50 +170,6 @@ def delete_project(username, project_name):
     cursor.execute("delete from projects where name ='%s' and userID='%d'" % (project_name, data[0]))
     db.commit()
     db.close()
-
-
-# not use again, all users use one database
-def database_exist(username, password):
-    db = MySQLdb.connect(config.database_url, config.rootname, config.rootpass)
-    cursor = db.cursor()
-    cursor.execute("show databases;")
-    database_list = cursor.fetchall()
-    database_l = tuple_in_tuple(database_list)
-
-    for user in database_l:
-        if user == username:
-            return True
-
-    return False
-
-
-# not use again, all users use one database
-def create_basetable(username, password):
-    db = MySQLdb.connect(config.database_url, config.rootname, config.rootpass)
-    cursor = db.cursor()
-    cursor.execute("create database '%s';" % username)
-    cursor.execute("create user '%s'@'%s' identified by '%s';" % (username, '%', password))
-    cursor.execute("grant all on '%s'.* to '%s'@'%s';" % (username, username, '%'))
-    db.commit()
-    db.close()
-
-    # create some tables for this user
-    user_db = MySQLdb.connect(config.database_url, username, password, username)
-    user_cursor = user_db.cursor()
-    user_cursor.execute("create table info(name char(50) not null, net char(50), volume char(50));")
-    user_cursor.execute("create table machine(id int unsigned not null, ip char(50));")
-    user_cursor.execute(
-        "create table project(id int unsigned not null auto_increment primary key, name char(50), url char(50));")
-    user_cursor.execute("create table service(name char(50), machine int unsigned, project char(50));")
-    user_cursor.execute("insert into info values('%s', '%s', '%s_volume');" % (username, username, username))
-    client_id = 0
-    for client in config.client_list:
-        user_cursor.execute("insert into machine values(%d, '%s');" % (client_id, client))
-        client_id += 1
-    # user_cursor.execute("insert into machine values(0, '192.168.56.105:2376');")
-    # user_cursor.execute("insert into machine values(1, '192.168.56.106:2376');")
-    user_db.commit()
-    user_db.close()
 
 
 def create_user(username, email):
