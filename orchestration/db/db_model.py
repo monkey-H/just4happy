@@ -1,240 +1,186 @@
-import db_helper as db
+# -*- coding: utf-8 -*-
+
+from db_helper import DBHelper as Db
 
 
-################################################################################
-# 由于添加用户时会创建默认的overlay网络，所有该用户的容器都接入该默认网络
-# 暂不支持更多的overlay网络
-
-# todo: sql string need quot '' ?
-
-# not use temporarily
-def get_net(user_id):
-    data = db.exec_cmd("select net from info where name='%s'", user_id)  # todo: verify this
-    return data[0]
+# todo: 考虑增加redis/memcached等缓存层以提高性能
 
 
-# not use temporarily
-def set_net(user_id, net_id):
-    db.exec_cmd("insert into info(net) values('%s') where name='%s'", (net_id, user_id))  # todo: verify this
+class DBModel(object):
+    ################################################################################
+    # 由于添加用户时会创建默认的overlay网络，所有该用户的容器都接入该默认网络
+    # 暂不支持更多的overlay网络
+    # not use temporarily
+    class Network(object):
+        # todo: sql string need quot '%s' ?
 
+        @staticmethod
+        def get(user_id):
+            data = Db.exec_cmd("select net from info where name='%s'",
+                               user_id)  # todo: check tuple usage
+            return data[0]
 
-# not use temporarily
-def get_volume(user_id):
-    return db.exec_list("select volume from info where name='%s'", user_id)
+        @staticmethod
+        def create(user_id, net_id):
+            Db.exec_cmd("insert into info(net) values('%s') where name='%s'",
+                        (net_id, user_id))  # todo: check tuple usage
 
+    # not use temporarily
+    class Volume(object):
+        @staticmethod
+        def get(user_id):
+            return Db.exec_list("select volume from info where name='%s'", user_id)
 
-# not use temporarily
-def set_volume(user_id, volume_path):
-    db.exec_cmd("insert into info(volume) values('%s') where name='%s'", (user_id, volume_path))
+        @staticmethod
+        def create(user_id, volume_path):
+            Db.exec_cmd("insert into info(volume) values('%s') where name='%s'",
+                        (user_id, volume_path))
 
+    class Service(object):
+        # todo: name or id?
+        @staticmethod
+        def get_list(user_id, project_name):
+            prj_id = Db.exec_one("select id from projects "
+                                 "where name = '%s' and userID=(select id from user where name='%s')",
+                                 (project_name, user_id))
 
-def get_service(user_id, project_id, service_name):
-    # db.exec_list("select id from projects where name = '%s' and userID='%s'"
-    #                % (project_name, username))
-    #
-    # cursor.execute("select name from services where projectID='%d' and name = " % data[0])
-    # data = cursor.fetchall()
-    #
-    # if data is None:
-    #     return None
+            if prj_id is None:
+                raise Exception("Project does not exist for %s, %s" % (user_id, project_name))
 
+            return Db.exec_list("select name from services where projectID='%s'", prj_id)
+            # todo: why not use single sql cmd?
+            # sql = "select name from services "
+            #          "where projectID in "
+            #          "(select id from projects "
+            #          " where name='%s' and userID in (select id from user where name = '%s')))",
+            #          (project_name, username)
+            #
+            # return Db.exec_list(sql)
 
-def service_list(username, project_name):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select id from projects where name = '%s' and userID=(select id from user where name='%s')"
-                   % (project_name, username))
-    data = cursor.fetchall()
+        @staticmethod
+        def create(user_name, service_name, machine_ip, project_name):
+            prj_id = Db.exec_one("select id from projects "
+                                 "where name='%s' and userID in (select id from user where name = '%s')",
+                                 (project_name, user_name))
+            Db.exec_cmd("insert into services(name, projectID, IP) values('%s', %s, '%s')",
+                        (service_name, prj_id, machine_ip))
 
-    if len(data) == 0:
-        return None
+        # todo: db 表名应改为英文名词单数
+        @staticmethod
+        def get_host_ip(user_id, project_name, service_name):
+            prj_id = Db.exec_one("select id from projects "
+                                 "where name='%s' and userID='%s')",
+                                 (project_name, user_id))
 
-    cursor.execute("select name from services where projectID='%d'" % data[0])
-    data = cursor.fetchall()
-    return data
-    # clause = "select name from services " \
-    #          "where projectID in " \
-    #          "(select id from projects where name='%s' and userID in (select id from user where name = '%s')))" \
-    #          % (project_name, username)
-    #
-    # data = database_get(clause)
+            return Db.exec_one("select IP from services "
+                               "where name='%s' and projectID='%s'",
+                               (service_name, prj_id))
 
+    class Project(object):
+        @staticmethod
+        def exists(user_name, project_name):
+            prj = Db.exec_one("select 1 from projects "
+                              "where name='%s' and userID = (select id from user where name = '%s')",
+                              (project_name, user_name))
 
-def create_service(username, service_name, machine_ip, project_name):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select id from projects where name='%s' and userID in (select id from user where name = '%s')"
-                   % (project_name, username))
-    data = cursor.fetchone()
-    cursor.execute("insert into services(name, projectID, IP) values('%s', %d, '%s')"
-                   % (service_name, data[0], machine_ip))
-    db.commit()
-    db.close()
+            return prj is not None
 
+        @staticmethod
+        def delete(user_id, password, project_name):
+            # todo: 删除容器考虑在上层实现?
+            srv_list = DBModel.Service.get_list(user_id, password, project_name)
+            if len(srv_list) != 0:
+                for service_name in srv_list:
+                    ip = DBModel.Service.get_host_ip(user_id, project_name, service_name)
+                    if ip == '-':
+                        continue
+                    else:
+                        # rm this container
+                        # cli = Client(base_url=url, version=config.c_version)
+                        # full_name = username + config.split_mark + project_name + config.split_mark + service_name
+                        # if container_exists(cli, full_name):
+                        #     logs = logs + full_name + '\n' + cli.logs(container=full_name) + '\n'
+                        #     cli.stop(container=full_name)
+                        #     cli.remove_container(container=full_name)
+                        pass
 
-def delete_service(username, project_name):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select id from projects where name='%s' and userID = (select id from user where name = '%s')"
-                   % (project_name, username))
-    data = cursor.fetchall()
-    cursor.execute("delete from services where projectID = '%s'" % data[0])
-    db.commit()
-    db.close()
+            Db.exec_cmd("delete from service where project='%s'", project_name)
+            Db.exec_cmd("delete from project where name='%s'", project_name)
 
+        @staticmethod
+        def create(user_id, project_name, url):
+            Db.exec_cmd("insert into projects(name, userID, url) values('%s', '%s', '%s')",
+                        (project_name, user_id, url))
 
-def project_exists(username, project_name):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select * from projects where name='%s' and userID = (select id from user where name = '%s')"
-                   % (project_name, username))
-    data = cursor.fetchall()
-    db.close()
+        @staticmethod
+        def delete(user_id, project_name):
+            Db.exec_cmd("delete from projects where name ='%s' and userID='%s'", (project_name, user_id))
 
-    return True if data else False
+        @staticmethod
+        def get_info(user_id, project_name):
+            # todo: name已经知道了，url是git repo的url吗？
+            return Db.exec_one("select name, url from projects where userID = '%s' and name = '%s'",
+                               (user_id, project_name))
 
+        @staticmethod
+        def get_list(user_id, start_index, count):
+            """
+            返回用于分页的某个用户的所有项目;
+            如果count <= 0，则忽略 start_index，返回全部列表
+            """
+            if count <= 0:
+                return Db.exec_list("select name, url from projects "
+                                    "where userID = '%s'",
+                                    user_id)
+            else:
+                return Db.exec_list("select name, url from projects "
+                                    "where userID = '%s' limit %s,%s",
+                                    (user_id, start_index, count))
 
-def roll_back(username, password, project_name):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
+        @staticmethod
+        def delete_all_services(user_name, project_name):
+            prj_id = Db.exec_one("select id from projects "
+                                 "where name='%s' and userID = (select id from user where name = '%s')",
+                                 (project_name, user_name))
+            if prj_id is None:
+                raise Exception("Project does not exist for %s, %s" % (user_name, project_name))
 
-    logs = ''
-    srv_list = service_list(username, password, project_name)
-    if srv_list:
-        for service_name in srv_list:
-            url = service_ip(username, project_name, service_name)
-            if url == '-':
-                continue
-            cli = Client(base_url=url, version=config.c_version)
-            full_name = username + config.split_mark + project_name + config.split_mark + service_name
-            if container_exists(cli, full_name):
-                logs = logs + full_name + '\n' + cli.logs(container=full_name) + '\n'
-                cli.stop(container=full_name)
-                cli.remove_container(container=full_name)
-        cursor.execute("delete from service where project='%s'" % project_name)
-        cursor.execute("delete from project where name='%s'" % project_name)
-        db.commit()
-        db.close()
+            Db.exec_cmd("delete from services where projectID = '%s'", prj_id)
 
-    return logs
+    class User(object):
+        @staticmethod
+        def add_user(user_name, email):
+            Db.exec_cmd("insert into user(name, email) values('%s', '%s')",
+                        (user_name, email))
+            # todo: 添加用户后创建默认网络和volume由上层负责
+            # todo: return user_id?
 
+        @staticmethod
+        def delete_user_and_projects(user_name):
+            """
+            删除用户及该用户的所有项目和所属服务
+            """
+            # todo: 删除所有项目和所属服务是否有上层负责，或以事务方式执行？
+            # todo: 合并下面的多条sql cmds?
+            user_id = Db.exec_one("select id from user where name='%s'", user_name)
 
-def service_ip(username, project_name, service_name):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select id from projects where name='%s' and userID=(select id from user where name='%s')"
-                   % (project_name, username))
-    data = cursor.fetchone()
-    print service_name
-    cursor.execute("select IP from services where name='%s' and projectID='%d'" % (service_name, data[0]))
-    data = cursor.fetchone()
-    return data[0]
+            Db.exec_cmd("delete from services where projectID in "
+                        "(select id from projects where userID='%s')", user_id)
+            Db.exec_cmd("delete from projects where userID='%s'", user_id)
+            Db.exec_cmd("delete from user where name='%s'", user_id)
 
+    class Machine(object):
+        @staticmethod
+        def add_machine_list(ip_list):
+            for ip in ip_list:
+                Db.exec_cmd("insert into machine(ip) values('%s')", ip)
 
-def get_machines():
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select ip from machine")
-    data = cursor.fetchall()
-    db.close()
-    return tuple_in_tuple(data)
+        @staticmethod
+        def get_machine_list():
+            return Db.exec_list("select ip from machine")
 
-
-def get_machine(index):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select ip from machine limit %d,1" % index)
-    data = cursor.fetchone()
-    db.close()
-    return data[0]
-
-
-def create_project(username, project_name, url):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select id from user where name='%s'" % username)
-    data = cursor.fetchone()
-    print data[0]
-    cursor.execute("insert into projects(name, userID, url) values('%s', '%d', '%s')" % (project_name, data[0], url))
-    db.commit()
-    db.close()
-
-
-def delete_project(username, project_name):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select id from user where name='%s'" % username)
-    data = cursor.fetchone()
-    if len(data) == 0:
-        return
-    cursor.execute("delete from projects where name ='%s' and userID='%d'" % (project_name, data[0]))
-    db.commit()
-    db.close()
-
-
-def create_user(username, email):
-    # if database_exist(username, password):
-    #     return False, "username: %s already exists, please try anoter name"
-    #
-    # create_basetable(username, password)
-    # return True, "insert into mysql"
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("insert into user(name, email) values('%s', '%s')" % (username, email))
-    db.commit()
-    db.close()
-
-
-def create_machine(ip_list):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    for ip in ip_list:
-        cursor.execute("insert into machine(ip) values('%s')" % ip)
-    db.commit()
-    db.close()
-
-
-def delete_user(username):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select id from user where name='%s'" % username)
-    data = cursor.fetchone()
-
-    cursor.execute("delete from services where projectID in (select id from projects where userID='%d')" % data[0])
-    cursor.execute("delete from projects where userID='%d'" % data[0])
-    cursor.execute("delete from user where name='%s'" % username)
-    db.commit()
-    db.close()
-
-
-def get_project(username, project_name):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select id from user where name='%s'" % username)
-    data = cursor.fetchone()
-    if len(data) == 0:
-        return None
-
-    cursor.execute("select name,url from projects where userID = '%d' and name = '%s'" % (data[0], project_name))
-
-    data = cursor.fetchone()
-    db.close()
-
-    if data is None:
-        return None
-    return data
-
-
-def project_list(username, begin, length):
-    db = MySQLdb.connect(config.database_url, config.database_user, config.database_passwd, config.database)
-    cursor = db.cursor()
-    cursor.execute("select id from user where name='%s'" % username)
-    data = cursor.fetchone()
-    if len(data) == 0:
-        return None
-
-    cursor.execute("select name, url from projects where userID = '%d' limit %d,%d" % (data[0], begin, length))
-
-    data = cursor.fetchall()
-    db.close()
-    return data
+        @staticmethod
+        def get_machine(index):
+            # todo: what is this?
+            # todo: 用于随机调度？
+            return Db.exec_one("select ip from machine limit %s,1" % index)
